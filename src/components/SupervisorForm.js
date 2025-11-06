@@ -1,4 +1,3 @@
-// src/components/SupervisorForm.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
@@ -18,30 +17,47 @@ export default function SupervisorForm() {
   const [supervisorEmail, setSupervisorEmail] = useState("");
   const [assessorEmail, setAssessorEmail] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let active = true;
     (async () => {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "envelopes", id));
-      if (snap.exists() && active) {
-        const d = { id: snap.id, ...snap.data() };
-        setData(d);
-        setSupervisorEmail(d.supervisorEmail || "");
-        setAssessorEmail(d.assessorEmail || "");
+      try {
+        if (!id) { setError("Missing record id."); return; }
+        const snap = await getDoc(doc(db, "envelopes", id));
+        if (!active) return;
+
+        if (snap.exists()) {
+          const d = { id: snap.id, ...snap.data() };
+          setData(d);
+          setSupervisorEmail(d.supervisorEmail || "");
+          setAssessorEmail(d.assessorEmail || "");
+        } else {
+          setError("Record not found. The link may be invalid or expired.");
+        }
+      } catch (e) {
+        console.error(e);
+        setError("Could not load this record. Please retry.");
       }
     })();
-    return () => { active = false; };
+    return () => (active = false);
   }, [id]);
 
+  if (error) return <div className="max-w-3xl mx-auto p-6 text-red-600">{error}</div>;
   if (!data) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
 
   const isLocked = data.status !== "awaiting_supervisor";
 
   const submit = async () => {
     if (isLocked) return;
-    if (!assessorEmail.trim()) return alert("Please enter the assessor email.");
-    if (!padRef.current || padRef.current.isEmpty()) return alert("Please sign in the box.");
+    if (!assessorEmail.trim()) {
+      alert("Please enter the assessor email.");
+      return;
+    }
+    if (!padRef.current || padRef.current.isEmpty()) {
+      alert("Please sign in the box.");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -53,9 +69,12 @@ export default function SupervisorForm() {
         assessorEmail,
         supervisorSignedAt: serverTimestamp(),
         status: "awaiting_assessor",
+        updatedAt: serverTimestamp(),
       });
 
-      const actionLink = `${window.location.origin}/?id=${encodeURIComponent(id)}&role=assessor`;
+      const actionLink = `${window.location.origin}/?id=${encodeURIComponent(
+        id
+      )}&role=assessor`;
 
       try {
         await notifyAssessor({
@@ -97,28 +116,52 @@ export default function SupervisorForm() {
       <div className="bg-white rounded-xl shadow p-6 space-y-4">
         <div>
           <label className="block text-sm font-medium">Supervisor email</label>
-          <input className="mt-1 w-full rounded border px-3 py-2" type="email" value={supervisorEmail}
-                 disabled={isLocked} onChange={(e) => setSupervisorEmail(e.target.value)}
-                 placeholder="supervisor@example.com" />
+          <input
+            className="mt-1 w-full rounded border px-3 py-2"
+            type="email"
+            value={supervisorEmail}
+            disabled={isLocked}
+            onChange={(e) => setSupervisorEmail(e.target.value)}
+            placeholder="supervisor@example.com"
+          />
         </div>
 
         <div>
           <label className="block text-sm font-medium">Assessor email</label>
-          <input className="mt-1 w-full rounded border px-3 py-2" type="email" value={assessorEmail}
-                 disabled={isLocked} onChange={(e) => setAssessorEmail(e.target.value)}
-                 placeholder="assessor@example.com" />
+          <input
+            className="mt-1 w-full rounded border px-3 py-2"
+            type="email"
+            value={assessorEmail}
+            disabled={isLocked}
+            onChange={(e) => setAssessorEmail(e.target.value)}
+            placeholder="assessor@example.com"
+          />
         </div>
 
         <div className="border rounded-lg p-4">
           <p className="font-medium mb-2">Supervisor Signature</p>
-          <SignaturePad ref={padRef} disabled={isLocked} height={220} className="w-full border rounded bg-gray-50" />
+          <SignaturePad
+            ref={padRef}
+            disabled={isLocked}
+            height={220}
+            className="w-full border rounded bg-gray-50"
+          />
+
           <div className="mt-3">
-            <button onClick={submit} disabled={isLocked || saving}
-                    className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60">
+            <button
+              onClick={submit}
+              disabled={isLocked || saving}
+              className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
               {saving ? "Saving…" : "Submit & Notify Assessor"}
             </button>
           </div>
-          {isLocked && <p className="text-xs text-gray-500 mt-3">Locked after submission.</p>}
+
+          {isLocked && (
+            <p className="text-xs text-gray-500 mt-3">
+              Locked after submission.
+            </p>
+          )}
         </div>
       </div>
     </div>

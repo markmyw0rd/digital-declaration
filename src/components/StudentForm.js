@@ -1,35 +1,48 @@
-// src/components/StudentForm.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignaturePad from "./SignaturePad";
-import { notifySupervisor } from "../lib/notify";
 
 function getParam(name) {
-  const url = new URL(window.location.href);
-  return url.searchParams.get(name);
+  const u = new URL(window.location.href);
+  return u.searchParams.get(name);
 }
 
 export default function StudentForm() {
   const id = useMemo(() => getParam("id"), []);
   const padRef = useRef(null);
-
   const [data, setData] = useState(null);
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let active = true;
+    let alive = true;
     (async () => {
-      if (!id) return;
-      const snap = await getDoc(doc(db, "envelopes", id));
-      if (snap.exists() && active) setData({ id: snap.id, ...snap.data() });
+      try {
+        if (!id) { setError("Missing record id."); return; }
+        const snap = await getDoc(doc(db, "envelopes", id));
+        if (!alive) return;
+
+        if (!snap.exists()) {
+          setError("Record not found. The link may be invalid or expired.");
+          return;
+        }
+        setData({ id: snap.id, ...snap.data() });
+      } catch (e) {
+        console.error("Load envelope failed:", e);
+        setError("Could not load this record. Please retry.");
+      }
     })();
-    return () => { active = false; };
+    return () => { alive = false; };
   }, [id]);
 
-  const isLocked = data?.status && data.status !== "awaiting_student";
+  if (error) return <div className="max-w-3xl mx-auto p-6 text-red-600">{error}</div>;
+  if (!data)  return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
 
-  const handleSave = async () => {
+  const isLocked = data.status !== "awaiting_student";
+
+  async function submit() {
+    if (isLocked) return;
     if (!padRef.current || padRef.current.isEmpty()) {
       alert("Please sign in the box.");
       return;
@@ -37,40 +50,24 @@ export default function StudentForm() {
 
     setSaving(true);
     try {
-      const dataUrl = padRef.current.toDataURL();
-
+      const sig = padRef.current.toDataURL();
       await updateDoc(doc(db, "envelopes", id), {
-        studentSignature: dataUrl,
-        studentSignedAt: serverTimestamp(),
+        studentSignature: sig,
         status: "awaiting_supervisor",
+        updatedAt: serverTimestamp(),
       });
 
-      const actionLink = `${window.location.origin}/?id=${encodeURIComponent(id)}&role=supervisor`;
-
-      try {
-        await notifySupervisor({
-          to: data.supervisorEmail,
-          studentName: data.studentName || "-",
-          unitCode: data.unitCode || "AURTTE104",
-          actionLink,
-        });
-        alert("Submitted. Supervisor will be notified.");
-      } catch (mailErr) {
-        console.error(mailErr);
-        alert("Submitted. Failed to send email automatically—please contact IT.");
-      }
-
+      // reload to reflect new state
       const snap = await getDoc(doc(db, "envelopes", id));
       if (snap.exists()) setData({ id: snap.id, ...snap.data() });
+      alert("Submitted. The supervisor can now sign.");
     } catch (err) {
       console.error(err);
-      alert("Could not save signature.");
+      alert("Could not save student signature.");
     } finally {
       setSaving(false);
     }
-  };
-
-  if (!data) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
+  }
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -87,23 +84,29 @@ export default function StudentForm() {
       </div>
 
       <div className="bg-white rounded-xl shadow p-6">
-        <h2 className="text-xl font-semibold mb-3">Student Declaration</h2>
-        <p className="text-gray-700 mb-4">
-          I confirm that I can perform the required workplace tasks to industry standard,
-          independently and without additional supervision or training.
-        </p>
+        <p className="font-medium mb-2">Student Signature</p>
+        <SignaturePad
+          ref={padRef}
+          disabled={isLocked}
+          height={220}
+          className="w-full border rounded bg-gray-50"
+        />
 
-        <div className="border rounded-lg p-4">
-          <p className="font-medium mb-2">Student Signature</p>
-          <SignaturePad ref={padRef} disabled={isLocked} height={260} className="w-full border rounded bg-gray-50" />
-          <div className="mt-3 flex gap-3">
-            <button type="button" onClick={() => padRef.current?.clear()} disabled={isLocked} className="px-3 py-2 rounded border">Clear</button>
-            <button type="button" onClick={handleSave} disabled={isLocked || saving} className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60">
-              {saving ? "Saving…" : "Submit & Notify Supervisor"}
-            </button>
-          </div>
-          {isLocked && <p className="text-xs text-gray-500 mt-3">Locked after submission.</p>}
+        <div className="mt-3">
+          <button
+            onClick={submit}
+            disabled={isLocked || saving}
+            className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {saving ? "Saving…" : "Submit"}
+          </button>
         </div>
+
+        {isLocked && (
+          <p className="text-xs text-gray-500 mt-3">
+            Locked after submission.
+          </p>
+        )}
       </div>
     </div>
   );

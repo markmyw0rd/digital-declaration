@@ -1,80 +1,83 @@
-// src/components/StartStudent.js
 import React, { useState } from "react";
-import { db } from "../firebase";               // your existing Firestore export
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../lib/firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 export default function StartStudent() {
   const [studentName, setStudentName] = useState("");
   const [supervisorEmail, setSupervisorEmail] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const start = async (e) => {
+  async function handleStart(e) {
     e.preventDefault();
     if (!studentName.trim() || !supervisorEmail.trim()) {
       alert("Please fill in both fields.");
       return;
     }
-    setBusy(true);
+    setSaving(true);
     try {
-      const docRef = await addDoc(collection(db, "envelopes"), {
+      const ref = await addDoc(collection(db, "envelopes"), {
         unitCode: "AURTTE104",
+        status: "awaiting_student",
         studentName,
         supervisorEmail,
-        status: "awaiting_student",
+        assessorEmail: "",
+        // signatures
+        studentSignature: null,
+        supervisorSignature: null,
+        assessorSignature: null,
+        // result
+        outcome: null,
+        checklist: {},
         createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
       });
 
-      // Immediately send the student to their signing page
-      const id = docRef.id;
-      const url = `${window.location.origin}/?id=${encodeURIComponent(
-        id
-      )}&role=student`;
-      window.location.replace(url);
+      // IMPORTANT: redirect using the exact id we just created
+      window.location.href = `/?id=${encodeURIComponent(ref.id)}&role=student`;
     } catch (err) {
-      console.error(err);
-      alert("Could not start the declaration.");
+      console.error("Create envelope failed:", err);
+      alert("Could not start the declaration. Please try again.");
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
-  };
+  }
 
   return (
-    <div className="max-w-2xl mx-auto p-6 bg-white rounded-xl shadow">
-      <h1 className="text-2xl font-bold mb-6">Start Declaration – AURTTE104</h1>
-
-      <form onSubmit={start} className="space-y-4">
+    <div className="max-w-xl mx-auto p-6">
+      <h1 className="text-3xl font-bold text-emerald-700 mb-6">
+        Start Declaration — AURTTE104
+      </h1>
+      <form onSubmit={handleStart} className="space-y-4">
         <div>
           <label className="block text-sm font-medium">Student name</label>
           <input
             className="mt-1 w-full rounded border px-3 py-2"
             value={studentName}
             onChange={(e) => setStudentName(e.target.value)}
-            placeholder="e.g., Mark Alvin Mabayo"
+            placeholder="Jane Appleseed"
           />
         </div>
 
         <div>
           <label className="block text-sm font-medium">Supervisor email</label>
           <input
-            className="mt-1 w-full rounded border px-3 py-2"
             type="email"
+            className="mt-1 w-full rounded border px-3 py-2"
             value={supervisorEmail}
             onChange={(e) => setSupervisorEmail(e.target.value)}
-            placeholder="name@example.com"
+            placeholder="supervisor@example.com"
           />
         </div>
 
         <button
-          type="submit"
-          disabled={busy}
-          className="inline-flex items-center px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          disabled={saving}
+          className="w-full rounded bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
         >
-          {busy ? "Starting…" : "Start"}
+          {saving ? "Starting…" : "Start"}
         </button>
 
         <p className="text-xs text-gray-500">
-          Tip: This page is the only link you place in aXcelerate. It creates a
-          unique declaration for each student.
+          This is the only link you place in aXcelerate. Each student gets a unique workflow.
         </p>
       </form>
     </div>
