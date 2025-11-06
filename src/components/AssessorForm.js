@@ -1,12 +1,7 @@
 // src/components/AssessorForm.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../firebase";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { db } from "../lib/firebase"; // <-- fixed path
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignaturePad from "./SignaturePad";
 import { notifyFinal } from "../lib/notify";
 
@@ -34,7 +29,9 @@ export default function AssessorForm() {
         setOutcome(d.outcome || "competent");
       }
     })();
-    return () => (active = false);
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   if (!data) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
@@ -53,7 +50,7 @@ export default function AssessorForm() {
       const sig = padRef.current.toDataURL();
 
       await updateDoc(doc(db, "envelopes", id), {
-        assessorSig: sig,
+        assessorSignature: sig, // <-- normalized field name
         outcome,
         assessorSignedAt: serverTimestamp(),
         status: "completed",
@@ -61,24 +58,27 @@ export default function AssessorForm() {
 
       const finalLink = `${window.location.origin}/?id=${encodeURIComponent(
         id
-      )}&role=student`; // or a dedicated "view" route
+      )}&role=student`; // link back to view/download
 
       const recipients = [
-        data.studentEmail,     // optional if you store it
+        data.studentEmail, // if stored
         data.supervisorEmail,
         data.assessorEmail,
       ].filter(Boolean);
 
       try {
         if (recipients.length) {
-          await notifyFinal({ recipients, finalLink });
+          await notifyFinal({
+            to: recipients,
+            finalLink,
+            studentName: data.studentName || "-",
+            unitCode: data.unitCode || "AURTTE104",
+          });
         }
         alert("Declaration completed.");
       } catch (e) {
         console.error(e);
-        alert(
-          "Completed, but failed to send final emails automatically."
-        );
+        alert("Completed, but failed to send final emails automatically.");
       }
 
       const snap = await getDoc(doc(db, "envelopes", id));
