@@ -1,21 +1,15 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { db } from "../lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignaturePad from "./SignaturePad";
-import { notifySupervisor } from "../lib/notify";
 
-function qp(name) {
-  try {
-    return new URL(window.location.href).searchParams.get(name);
-  } catch {
-    return null;
-  }
+function getParam(name) {
+  const url = new URL(window.location.href);
+  return url.searchParams.get(name);
 }
 
 export default function StudentForm() {
-  const id = useMemo(() => qp("id"), []);
-  const padRef = useRef(null);
-
+  const id = useMemo(() => getParam("id") || "", []);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -23,7 +17,7 @@ export default function StudentForm() {
   useEffect(() => {
     (async () => {
       if (!id) {
-        setErr("Missing id");
+        setErr("Missing link id.");
         setLoading(false);
         return;
       }
@@ -37,67 +31,61 @@ export default function StudentForm() {
           setData({ id: snap.id, ...snap.data() });
         }
       } catch (e) {
-        console.error("[StudentForm] getDoc error:", e);
-        setErr(e.message || "error");
+        console.error("[StudentForm] Read error:", e);
+        setErr("read_error");
       } finally {
         setLoading(false);
       }
     })();
   }, [id]);
 
-  if (loading) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
+  if (loading) return <div className="p-6">Loading…</div>;
+
   if (err === "not_found")
     return (
-      <div className="max-w-3xl mx-auto p-6 text-red-600">
-        <p className="font-semibold">
+      <div className="p-6 text-center">
+        <p className="text-red-600 font-medium mb-2">
           Record not found. The link may be invalid or expired.
         </p>
-        <p className="mt-2 text-sm text-gray-600">
+        <a href="/" className="text-emerald-700 underline">
           Create a new declaration from the start page.
-        </p>
+        </a>
       </div>
     );
-  if (err) return <div className="max-w-3xl mx-auto p-6">Error: {String(err)}</div>;
-  if (!data) return null;
 
-  const isLocked = data.status !== "awaiting_student";
+  if (err)
+    return (
+      <div className="p-6 text-center">
+        <p className="text-red-600 font-medium mb-2">Could not open this record.</p>
+        <a href="/" className="text-emerald-700 underline">
+          Go back to start
+        </a>
+      </div>
+    );
 
-  const submit = async () => {
-    if (isLocked) return;
-    if (!padRef.current || padRef.current.isEmpty()) {
-      alert("Please sign in the box.");
-      return;
-    }
+  // ===== Example student signing UI (adjust to your fields) =====
+  const [saving, setSaving] = useState(false);
+  const [sigDataUrl, setSigDataUrl] = useState(null);
+
+  const onSubmit = async () => {
+    if (!sigDataUrl) return;
+    setSaving(true);
     try {
-      const sig = padRef.current.toDataURL();
-      await updateDoc(doc(db, "envelopes", id), {
-        studentSig: sig,
-        studentSignedAt: serverTimestamp(),
+      await updateDoc(doc(db, "envelopes", data.id), {
+        studentSignature: sigDataUrl,
         status: "awaiting_supervisor",
+        updatedAt: serverTimestamp(),
       });
 
-      const link = `${window.location.origin}/?id=${encodeURIComponent(
-        id
-      )}&role=supervisor`;
-
-      try {
-        await notifySupervisor({
-          to: data.supervisorEmail,
-          studentName: data.studentName || "-",
-          unitCode: data.unitCode || "AURTTE104",
-          actionLink: link,
-        });
-        alert("Submitted. Supervisor will be notified.");
-      } catch (e) {
-        console.error(e);
-        alert("Submitted, but failed to email the supervisor automatically.");
-      }
-
-      const snap = await getDoc(doc(db, "envelopes", id));
-      if (snap.exists()) setData({ id: snap.id, ...snap.data() });
+      // After student signs, move to supervisor view
+      const u = new URL(window.location.href);
+      u.searchParams.set("role", "supervisor");
+      window.location.replace(`${u.origin}${u.pathname}?${u.searchParams.toString()}`);
     } catch (e) {
-      console.error(e);
+      console.error("[StudentForm] Update error:", e);
       alert("Could not save student signature.");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -106,6 +94,7 @@ export default function StudentForm() {
       <h1 className="text-3xl font-bold text-emerald-700 mb-2">
         Digital Declaration – {data.unitCode || "AURTTE104"}
       </h1>
+
       <div className="text-sm text-gray-600 mb-6">
         <p>
           <strong>Student:</strong> {data.studentName || "-"}
@@ -117,30 +106,24 @@ export default function StudentForm() {
         </p>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6">
-        <p className="font-medium mb-2">Student Signature</p>
-        <SignaturePad
-          ref={padRef}
-          disabled={isLocked}
-          height={220}
-          className="w-full border rounded bg-gray-50"
-        />
-
-        <div className="mt-3">
-          <button
-            onClick={submit}
-            disabled={isLocked}
-            className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-          >
-            Submit & Notify Supervisor
-          </button>
+      <div className="bg-white rounded-xl shadow p-6 space-y-4">
+        <div className="border rounded-lg p-4">
+          <p className="font-medium mb-2">Student Signature</p>
+          <SignaturePad
+            onChange={(dataUrl) => setSigDataUrl(dataUrl)}
+            height={220}
+            className="w-full border rounded bg-gray-50"
+          />
+          <div className="mt-3">
+            <button
+              onClick={onSubmit}
+              disabled={saving || !sigDataUrl}
+              className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+            >
+              {saving ? "Saving…" : "Submit"}
+            </button>
+          </div>
         </div>
-
-        {isLocked && (
-          <p className="text-xs text-gray-500 mt-3">
-            Locked after submission.
-          </p>
-        )}
       </div>
     </div>
   );
