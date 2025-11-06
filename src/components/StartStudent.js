@@ -21,18 +21,20 @@ export default function StartStudent() {
         studentName,
         supervisorEmail,
         assessorEmail: "",
-        // signatures
         studentSignature: null,
         supervisorSignature: null,
         assessorSignature: null,
-        // result
         outcome: null,
         checklist: {},
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      // IMPORTANT: redirect using the exact id we just created
+      // Show/confirm the created ID so you know it exists
+      console.log("Envelope created:", ref.id);
+      alert(`Created record:\n${ref.id}`);
+
+      // Redirect on THE SAME origin you created it on
       window.location.href = `/?id=${encodeURIComponent(ref.id)}&role=student`;
     } catch (err) {
       console.error("Create envelope failed:", err);
