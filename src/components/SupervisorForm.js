@@ -1,12 +1,7 @@
 // src/components/SupervisorForm.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../firebase";
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
-} from "firebase/firestore";
+import { db } from "../lib/firebase"; // <-- fixed path
+import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignaturePad from "./SignaturePad";
 import { notifyAssessor } from "../lib/notify";
 
@@ -36,7 +31,9 @@ export default function SupervisorForm() {
         setAssessorEmail(d.assessorEmail || "");
       }
     })();
-    return () => (active = false);
+    return () => {
+      active = false;
+    };
   }, [id]);
 
   if (!data) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
@@ -58,8 +55,9 @@ export default function SupervisorForm() {
     try {
       const sig = padRef.current.toDataURL();
 
+      // keep schema consistent with other code: supervisorSignature
       await updateDoc(doc(db, "envelopes", id), {
-        supervisorSig: sig,
+        supervisorSignature: sig,
         supervisorEmail: supervisorEmail || data.supervisorEmail || "",
         assessorEmail,
         supervisorSignedAt: serverTimestamp(),
@@ -80,9 +78,7 @@ export default function SupervisorForm() {
         alert("Submitted. Assessor will be notified.");
       } catch (e) {
         console.error(e);
-        alert(
-          "Submitted, but failed to email the assessor automatically."
-        );
+        alert("Submitted, but failed to email the assessor automatically.");
       }
 
       const snap = await getDoc(doc(db, "envelopes", id));
@@ -157,9 +153,7 @@ export default function SupervisorForm() {
           </div>
 
           {isLocked && (
-            <p className="text-xs text-gray-500 mt-3">
-              Locked after submission.
-            </p>
+            <p className="text-xs text-gray-500 mt-3">Locked after submission.</p>
           )}
         </div>
       </div>
