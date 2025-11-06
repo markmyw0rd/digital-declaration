@@ -1,6 +1,6 @@
 // src/components/AssessorForm.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../lib/firebase"; // <-- fixed path
+import { db } from "../lib/firebase";
 import { doc, getDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import SignaturePad from "./SignaturePad";
 import { notifyFinal } from "../lib/notify";
@@ -29,52 +29,32 @@ export default function AssessorForm() {
         setOutcome(d.outcome || "competent");
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [id]);
 
   if (!data) return <div className="max-w-3xl mx-auto p-6">Loading…</div>;
-
   const isLocked = data.status === "completed";
 
   const submit = async () => {
     if (isLocked) return;
-    if (!padRef.current || padRef.current.isEmpty()) {
-      alert("Please sign in the box.");
-      return;
-    }
+    if (!padRef.current || padRef.current.isEmpty()) return alert("Please sign in the box.");
 
     setSaving(true);
     try {
       const sig = padRef.current.toDataURL();
 
       await updateDoc(doc(db, "envelopes", id), {
-        assessorSignature: sig, // <-- normalized field name
+        assessorSignature: sig,
         outcome,
         assessorSignedAt: serverTimestamp(),
         status: "completed",
       });
 
-      const finalLink = `${window.location.origin}/?id=${encodeURIComponent(
-        id
-      )}&role=student`; // link back to view/download
+      const finalLink = `${window.location.origin}/?id=${encodeURIComponent(id)}&role=student`;
 
-      const recipients = [
-        data.studentEmail, // if stored
-        data.supervisorEmail,
-        data.assessorEmail,
-      ].filter(Boolean);
-
+      const recipients = [data.studentEmail, data.supervisorEmail, data.assessorEmail].filter(Boolean);
       try {
-        if (recipients.length) {
-          await notifyFinal({
-            to: recipients,
-            finalLink,
-            studentName: data.studentName || "-",
-            unitCode: data.unitCode || "AURTTE104",
-          });
-        }
+        if (recipients.length) await notifyFinal({ recipients, finalLink });
         alert("Declaration completed.");
       } catch (e) {
         console.error(e);
@@ -98,12 +78,9 @@ export default function AssessorForm() {
       </h1>
 
       <div className="text-sm text-gray-600 mb-6">
-        <p>
-          <strong>Student:</strong> {data.studentName || "-"}
-        </p>
+        <p><strong>Student:</strong> {data.studentName || "-"}</p>
         <p className="mt-1">
-          <strong>Status:</strong> {data.status || "-"}{" "}
-          <span className="text-gray-400">·</span>{" "}
+          <strong>Status:</strong> {data.status || "-"} <span className="text-gray-400">·</span>{" "}
           <strong>Current role view:</strong> assessor
         </p>
       </div>
@@ -113,25 +90,13 @@ export default function AssessorForm() {
           <label className="block text-sm font-medium">Outcome (tick one)</label>
           <div className="mt-2 flex gap-6">
             <label className="inline-flex items-center gap-2">
-              <input
-                type="radio"
-                name="outcome"
-                value="competent"
-                disabled={isLocked}
-                checked={outcome === "competent"}
-                onChange={() => setOutcome("competent")}
-              />
+              <input type="radio" name="outcome" value="competent" disabled={isLocked}
+                     checked={outcome === "competent"} onChange={() => setOutcome("competent")} />
               Competent
             </label>
             <label className="inline-flex items-center gap-2">
-              <input
-                type="radio"
-                name="outcome"
-                value="nyc"
-                disabled={isLocked}
-                checked={outcome === "nyc"}
-                onChange={() => setOutcome("nyc")}
-              />
+              <input type="radio" name="outcome" value="nyc" disabled={isLocked}
+                     checked={outcome === "nyc"} onChange={() => setOutcome("nyc")} />
               Not Yet Competent
             </label>
           </div>
@@ -139,28 +104,14 @@ export default function AssessorForm() {
 
         <div className="border rounded-lg p-4">
           <p className="font-medium mb-2">Assessor Signature</p>
-          <SignaturePad
-            ref={padRef}
-            disabled={isLocked}
-            height={220}
-            className="w-full border rounded bg-gray-50"
-          />
-
+          <SignaturePad ref={padRef} disabled={isLocked} height={220} className="w-full border rounded bg-gray-50" />
           <div className="mt-3">
-            <button
-              onClick={submit}
-              disabled={isLocked || saving}
-              className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-            >
+            <button onClick={submit} disabled={isLocked || saving}
+                    className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60">
               {saving ? "Saving…" : "Submit & Complete"}
             </button>
           </div>
-
-          {isLocked && (
-            <p className="text-xs text-gray-500 mt-3">
-              Completed – record is locked.
-            </p>
-          )}
+          {isLocked && <p className="text-xs text-gray-500 mt-3">Completed – record is locked.</p>}
         </div>
       </div>
     </div>
