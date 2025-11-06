@@ -1,87 +1,74 @@
 import React, { useState } from "react";
-import { db } from "../lib/firebase";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { createEnvelope } from "../lib/envelopes";
+
+const CANONICAL_ORIGIN = "https://digital-declaration.vercel.app";
 
 export default function StartStudent() {
   const [studentName, setStudentName] = useState("");
   const [supervisorEmail, setSupervisorEmail] = useState("");
-  const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  async function handleStart(e) {
-    e.preventDefault();
-    if (!studentName.trim() || !supervisorEmail.trim()) {
-      alert("Please fill in both fields.");
+  const start = async () => {
+    if (!studentName.trim()) {
+      alert("Please enter student name");
       return;
     }
-    setSaving(true);
+    if (!supervisorEmail.trim()) {
+      alert("Please enter supervisor email");
+      return;
+    }
+    setBusy(true);
     try {
-      const ref = await addDoc(collection(db, "envelopes"), {
+      const { id /*, supToken, assToken */ } = await createEnvelope({
         unitCode: "AURTTE104",
-        status: "awaiting_student",
         studentName,
         supervisorEmail,
-        assessorEmail: "",
-        studentSignature: null,
-        supervisorSignature: null,
-        assessorSignature: null,
-        outcome: null,
-        checklist: {},
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
       });
 
-      // Show/confirm the created ID so you know it exists
-      console.log("Envelope created:", ref.id);
-      alert(`Created record:\n${ref.id}`);
+      // Redirect to the canonical production domain to avoid preview-link issues
+      const base = window.location.origin === CANONICAL_ORIGIN
+        ? window.location.origin
+        : CANONICAL_ORIGIN;
 
-      // Redirect on THE SAME origin you created it on
-      window.location.href = `/?id=${encodeURIComponent(ref.id)}&role=student`;
-    } catch (err) {
-      console.error("Create envelope failed:", err);
-      alert("Could not start the declaration. Please try again.");
-    } finally {
-      setSaving(false);
+      const href = `${base}/?id=${encodeURIComponent(id)}&role=student`;
+      console.log("[StartStudent] New envelope id =", id, "→", href);
+      window.location.href = href;
+    } catch (e) {
+      console.error(e);
+      alert("Could not start the declaration.");
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <div className="max-w-xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-emerald-700 mb-6">
-        Start Declaration — AURTTE104
+    <div className="max-w-xl mx-auto p-6 bg-white rounded-xl shadow">
+      <h1 className="text-2xl font-bold text-emerald-700 mb-4">
+        Start Declaration – AURTTE104
       </h1>
-      <form onSubmit={handleStart} className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium">Student name</label>
-          <input
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={studentName}
-            onChange={(e) => setStudentName(e.target.value)}
-            placeholder="Jane Appleseed"
-          />
-        </div>
+      <label className="block text-sm font-medium">Student name</label>
+      <input
+        className="mt-1 mb-3 w-full rounded border px-3 py-2"
+        value={studentName}
+        onChange={(e) => setStudentName(e.target.value)}
+        placeholder="Student full name"
+      />
 
-        <div>
-          <label className="block text-sm font-medium">Supervisor email</label>
-          <input
-            type="email"
-            className="mt-1 w-full rounded border px-3 py-2"
-            value={supervisorEmail}
-            onChange={(e) => setSupervisorEmail(e.target.value)}
-            placeholder="supervisor@example.com"
-          />
-        </div>
+      <label className="block text-sm font-medium">Supervisor email</label>
+      <input
+        className="mt-1 mb-4 w-full rounded border px-3 py-2"
+        value={supervisorEmail}
+        onChange={(e) => setSupervisorEmail(e.target.value)}
+        type="email"
+        placeholder="supervisor@example.com"
+      />
 
-        <button
-          disabled={saving}
-          className="w-full rounded bg-emerald-600 px-4 py-2 text-white hover:bg-emerald-700 disabled:opacity-60"
-        >
-          {saving ? "Starting…" : "Start"}
-        </button>
-
-        <p className="text-xs text-gray-500">
-          This is the only link you place in aXcelerate. Each student gets a unique workflow.
-        </p>
-      </form>
+      <button
+        onClick={start}
+        disabled={busy}
+        className="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+      >
+        {busy ? "Creating…" : "Start"}
+      </button>
     </div>
   );
 }

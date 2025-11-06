@@ -1,7 +1,5 @@
 import { db } from "./firebase";
-import {
-  addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc, getDoc,
-} from "firebase/firestore";
+import {addDoc, collection, doc, onSnapshot, serverTimestamp, updateDoc, getDoc,} from "firebase/firestore";
 
 // Simple token (good enough for this use)
 export function generateToken(len = 32) {
