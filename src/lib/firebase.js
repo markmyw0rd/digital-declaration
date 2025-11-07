@@ -1,4 +1,5 @@
-import { initializeApp } from "firebase/app";
+// src/lib/firebase.js
+import { initializeApp, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -12,4 +13,8 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
+
+// DIAGNOSTIC: keep while testing
+console.log("[Diag] Firebase projectId =", getApp().options.projectId);
+
 export const db = getFirestore(app);
