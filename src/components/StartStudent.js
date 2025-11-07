@@ -1,82 +1,106 @@
 import React, { useState } from "react";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import { db } from "../lib/firebase";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 
 export default function StartStudent() {
   const [studentName, setStudentName] = useState("");
   const [supervisorEmail, setSupervisorEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
 
-  async function handleStart(e) {
+  const start = async (e) => {
     e.preventDefault();
     setErr("");
-    if (!studentName.trim() || !supervisorEmail.trim()) {
-      setErr("Please enter student name and supervisor email.");
-      return;
-    }
-    try {
-      setSubmitting(true);
 
-      // 1) Create the doc and WAIT for the id
-      const ref = await addDoc(collection(db, "envelopes"), {
-        unitCode: "AURTTE104",
+    const name = studentName.trim();
+    const sup = supervisorEmail.trim();
+
+    if (!name) return setErr("Please enter the student name.");
+    if (!sup || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(sup))
+      return setErr("Please enter a valid supervisor email.");
+
+    try {
+      setBusy(true);
+
+      // 1) Create the ENVELOPE first (this is the id we’ll pass in the URL)
+      const envRef = await addDoc(collection(db, "envelopes"), {
         status: "awaiting_student",
-        studentName,
-        supervisorEmail,
-        studentSignature: null,
-        supervisorSignature: null,
-        assessorSignature: null,
-        outcome: null,
-        checklist: {},
+        studentName: name,
+        supervisorEmail: sup,
+        checklist: {
+          studentSigned: false,
+          supervisorSigned: false,
+          assessorSigned: false,
+        },
+        unitCode: "AURTTE104",
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
-      console.log("[StartStudent] Created envelope id =", ref.id);
+      const envelopeId = envRef.id;
 
-      // 2) (Optional) write the id back into the doc for easy audit
-      // await setDoc(ref, { _selfId: ref.id }, { merge: true });
+      // 2) (Optional) Create a top-level declaration that references the envelope
+      await addDoc(collection(db, "declarations"), {
+        envelopeId,
+        studentName: name,
+        supervisorEmail: sup,
+        unitCode: "AURTTE104",
+        createdAt: serverTimestamp(),
+      });
 
-      // 3) Redirect only AFTER creation is confirmed
-      const dest = `${window.location.origin}?id=${encodeURIComponent(
-        ref.id
-      )}&role=student`;
-      console.log("[StartStudent] Redirecting to", dest);
-      window.location.assign(dest);
+      // 3) Redirect student to the envelope
+      const next = `/?id=${encodeURIComponent(envelopeId)}&role=student`;
+      window.location.assign(next);
     } catch (e) {
-      console.error("[StartStudent] Create failed:", e);
-      setErr("Could not start declaration. Check console for details.");
-      setSubmitting(false);
+      console.error(e);
+      setErr("Could not start the declaration. Please try again.");
+    } finally {
+      setBusy(false);
     }
-  }
+  };
 
   return (
-    <form onSubmit={handleStart} className="space-y-4">
-      <div>
-        <label>Student name</label>
-        <input
-          value={studentName}
-          onChange={(e) => setStudentName(e.target.value)}
-          className="w-full border rounded px-3 py-2"
-        />
-      </div>
-      <div>
-        <label>Supervisor email</label>
-        <input
-          value={supervisorEmail}
-          onChange={(e) => setSupervisorEmail(e.target.value)}
-          className="w-full border rounded px-3 py-2"
-        />
-      </div>
-      {err && <p className="text-red-600">{err}</p>}
-      <button
-        type="submit"
-        disabled={submitting}
-        className="bg-emerald-600 text-white px-6 py-3 rounded disabled:opacity-50"
-      >
-        {submitting ? "Starting..." : "Start"}
-      </button>
-    </form>
+    <div className="mx-auto max-w-xl p-6">
+      <h1 className="text-2xl font-semibold mb-6">
+        Start Declaration – AURTTE104
+      </h1>
+
+      <form onSubmit={start} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-1">Student name</label>
+          <input
+            className="w-full rounded border px-3 py-2"
+            value={studentName}
+            onChange={(e) => setStudentName(e.target.value)}
+            placeholder="e.g., Mark Alvin Mabayo"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-1">Supervisor email</label>
+          <input
+            className="w-full rounded border px-3 py-2"
+            value={supervisorEmail}
+            onChange={(e) => setSupervisorEmail(e.target.value)}
+            placeholder="e.g., supervisor@company.com"
+          />
+        </div>
+
+        {err && <p className="text-red-600 text-sm">{err}</p>}
+
+        <button
+          type="submit"
+          className="w-full rounded bg-emerald-600 text-white py-2 disabled:opacity-60"
+          disabled={busy}
+        >
+          {busy ? "Starting…" : "Start"}
+        </button>
+      </form>
+
+      <p className="text-sm text-gray-500 mt-4">
+        This is the only link you place in aXcelerate. Each student gets a unique
+        workflow.
+      </p>
+    </div>
   );
 }
