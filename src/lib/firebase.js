@@ -1,5 +1,5 @@
 // src/lib/firebase.js
-import { initializeApp, getApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -9,12 +9,12 @@ const firebaseConfig = {
   storageBucket: "digital-declaration.appspot.com",
   messagingSenderId: "657622540647",
   appId: "1:657622540647:web:2dbb75ddcc963619b8fc2",
-  measurementId: "G-GDUC8V2P9X8",
+  // measurementId is fine to leave or remove; not required for Firestore
 };
 
-const app = initializeApp(firebaseConfig);
+const app = getApps().length ? getApp() : initializeApp(firebaseConfig);
 
-// DIAGNOSTIC: keep while testing
+// TEMP diagnostic — keep until Vercel is verified
 console.log("[Diag] Firebase projectId =", getApp().options.projectId);
 
 export const db = getFirestore(app);
